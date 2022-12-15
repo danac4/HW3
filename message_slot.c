@@ -4,43 +4,83 @@
 #undef MODULE
 #define MODULE
 
-#include "message_slot.h"
 
 #include <linux/kernel.h>   /* We're doing kernel work */
 #include <linux/module.h>   /* Specifically, a module */
 #include <linux/fs.h>       /* for register_chrdev */
 #include <linux/uaccess.h>  /* for get_user and put_user */
-#include <linux/string.h>   /* for memset. NOTE - not string.h!*/
+#include <linux/slab.h>
 
-static int device_open( struct inode* inode,
-                        struct file*  file )
+MODULE_LICENSE("GPL");
+#include "message_slot.h"
+
+static Channel* devices[256]; /* message slots file array indexed by minor numbers, each message slot file points to it's channel linked list */
+
+static int device_open(struct inode* inode, struct file*  file)
 {
-
+  file->private_data = NULL;
+  return 0;
 }
 
 
-static int device_read( struct file* file,
-                            char __user* buffer,
-                            size_t       length,
-                            loff_t*      offset )
+static int device_read(struct file* file, char __user* buffer, size_t length, loff_t* offset)
 {
   
 }
 
 
-static int device_write( struct file*       file,
-                             const char __user* buffer,
-                             size_t             length,
-                             loff_t*            offset)
+static int device_write(struct file* file, const char __user* buffer, size_t length, loff_t* offset)
 {
-  
+  if(!file->private_data){
+    printk("Channel not set in device_write");
+    return -EINVAL;
+  }
+  else if(length == 0 || length > BUFF_LEN){
+    printk("passed message length invalid");x
+    return -EMSGSIZE;
+  }
+
 }
 
-static int device_ioctl( struct   file* file,
-                          unsigned int   ioctl_command_id,
-                          unsigned long  ioctl_param )
+static int device_ioctl(struct file* file, unsigned int ioctl_command_id, unsigned long ioctl_param)
 {
-  
+  int minor;
+  unsigned int channel_id = (unsigned int)ioctl_param;
+  minor = (int)iminor(file->f_inode);
+  if(ioctl_command_id != MSG_SLOT_CHANNEL || ioctl_param == 0){
+    printk("device_icotl failed");
+    return -EINVAL;
+  }
+  else if(!devices[minor]){
+    devices[minor] = (Channel*)kmalloc(sizeof(Channel),GFP_KERNEL);
+    if(!devices[minor]){
+      printk("head channel memory allocation failed in device_icotl");
+      return -ENOMEM;
+    }
+    devices[minor]->id = channel_id;
+    devices[minor]->last_message = NULL;
+    devices[minor]->next = NULL;
+    return 0;
+  }
+  else{
+    Channel* curr = devices[minor];
+    while(curr->id != channel_id){
+      if(!curr->next){
+        curr->next =(Channel*)kmalloc(sizeof(Channel),GFP_KERNEL);
+        if(!curr->next){
+          printk("channel memory allocation failed in device_icotl");
+          return -ENOMEM;
+        }
+        curr->next.id = channel_id;
+        curr->next.last_message = NULL;
+        curr->next.next = NULL;
+        curr = curr->next;
+      }
+      curr = curr->next;
+    }
+    file->private_data = (void*)curr;
+    return 0;
+  }
 }
 
 /* 
