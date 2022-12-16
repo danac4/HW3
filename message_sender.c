@@ -19,8 +19,6 @@ int main(int argc, char *argv[]){
        perror("File failed to open in message_sender.c");
        exit(1);
     }
-    perror("");
-    exit(1);
     //functionality
     close(fd); //success
     exit(0);

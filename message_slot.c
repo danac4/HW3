@@ -1,3 +1,4 @@
+/*I used recreation 6 as template for this assignment*/
 #undef __KERNEL__
 #define __KERNEL__
 
@@ -14,6 +15,10 @@
 MODULE_LICENSE("GPL");
 #include "message_slot.h"
 
+/* devices array:
+ * devices[i] represents message slot device file with minor number i,
+ * in the cell there's a pointer to a linked list of the channels of the relevant message slot device file
+ */
 static Channel* devices[256]; /* message slots file array indexed by minor numbers, each message slot file points to it's channel linked list */
 
 static int device_open(struct inode* inode, struct file*  file)
@@ -23,22 +28,25 @@ static int device_open(struct inode* inode, struct file*  file)
 }
 
 
-static int device_read(struct file* file, char __user* buffer, size_t length, loff_t* offset)
+static ssize_t device_read(struct file* file, char __user* buffer, size_t length, loff_t* offset)
 {
   
 }
 
 
-static int device_write(struct file* file, const char __user* buffer, size_t length, loff_t* offset)
+static ssize_t device_write(struct file* file, const char __user* buffer, size_t length, loff_t* offset)
 {
+  int i;
+  
   if(!file->private_data){
     printk("Channel not set in device_write");
     return -EINVAL;
   }
-  else if(length == 0 || length > BUFF_LEN){
+  if(length == 0 || length > BUFF_LEN){
     printk("passed message length invalid");x
     return -EMSGSIZE;
   }
+  
 
 }
 
