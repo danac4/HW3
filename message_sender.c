@@ -1,4 +1,4 @@
-#include "message_slot.h"//?
+#include "message_slot.h"
 
 #include <sys/errno.h>
 #include <stdio.h>
@@ -11,7 +11,6 @@
 int main(int argc, char *argv[]){
     int fd, ret;
     unsigned long channel_id;
-    char *message; //should not include null of argv[3]
 
     if(argc != 4){
         perror("Invalid command line arguments in message_sender.c");

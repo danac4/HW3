@@ -1,16 +1,17 @@
-/*I used recreation 6 as template for this assignment*/
 #undef __KERNEL__
 #define __KERNEL__
 
 #undef MODULE
 #define MODULE
 
+/*I used recreation 6 as template for this assignment*/
 
 #include <linux/kernel.h>   /* We're doing kernel work */
 #include <linux/module.h>   /* Specifically, a module */
 #include <linux/fs.h>       /* for register_chrdev */
 #include <linux/uaccess.h>  /* for get_user and put_user */
 #include <linux/slab.h>
+/*#include <linux/init.h>*/
 
 MODULE_LICENSE("GPL");
 
@@ -33,37 +34,38 @@ static int device_open(struct inode* inode, struct file*  file)
 //----------------------------------------------------------------
 static ssize_t device_read(struct file* file, char __user* buffer, size_t length, loff_t* offset)
 {
-  if(!file->private_data){
+  Channel *channel = (Channel*)(file->private_data);
+  if(!channel){
     printk("Channel not set in device_read");
     return -EINVAL;
   }
-  if(!file->private_data->last_message){
+  if(!channel->last_message){
     printk("No message exists in the requested channel");
     return -EWOULDBLOCK;
   }
-  if(file->private_data->message_len > length){
+  if(channel->message_len > length){
     printk("provided buffer length is too small");
     return -ENOSPC;
   }
-  if(copy_to_user(buffer,file->private_data->last_message,file->private_data->message_len)!= 0){
+  if(copy_to_user(buffer,channel->last_message,channel->message_len)!= 0){
     printk("copy_to_user failed in device_read");
     return -EFAULT;
   }
-  return file->private_data->message_len;
+  return channel->message_len;
 }
 
 
 //----------------------------------------------------------------
 static ssize_t device_write(struct file* file, const char __user* buffer, size_t length, loff_t* offset)
 {
-  int i;
   char* message;
-  if(!file->private_data){
+  Channel *channel = (Channel*)(file->private_data);
+  if(!channel){
     printk("Channel not set in device_write");
     return -EINVAL;
   }
   if(length <= 0 || length > BUFF_LEN){
-    printk("passed message length invalid");x
+    printk("passed message length invalid");
     return -EMSGSIZE;
   }
   message = kmalloc(sizeof(char)*length,GFP_KERNEL);
@@ -75,16 +77,16 @@ static ssize_t device_write(struct file* file, const char __user* buffer, size_t
     printk("copy_from_user failed in device_write");
     return -EFAULT;
   }
-  if(file->private_data->last_message){
-    kfree(file->private_data->last_message);
+  if(channel->last_message){
+    kfree(channel->last_message);
   }
-  file->private_data->last_message = &message;//?
-  file->private_data->message_len = (int)length;
+  channel->last_message = message;
+  channel->message_len = (int)length;
   return length;
 }
 
 //----------------------------------------------------------------
-static int device_ioctl(struct file* file, unsigned int ioctl_command_id, unsigned long ioctl_param)
+static long device_ioctl(struct file* file, unsigned int ioctl_command_id, unsigned long ioctl_param)
 {
   int minor;
   unsigned int channel_id = (unsigned int)ioctl_param;
@@ -101,7 +103,7 @@ static int device_ioctl(struct file* file, unsigned int ioctl_command_id, unsign
     }
     devices[minor]->id = channel_id;
     devices[minor]->last_message = NULL;
-    device[minor]->message_len = 0;
+    devices[minor]->message_len = 0;
     devices[minor]->next = NULL;
     return 0;
   }
@@ -114,10 +116,10 @@ static int device_ioctl(struct file* file, unsigned int ioctl_command_id, unsign
           printk("channel memory allocation failed in device_icotl");
           return -ENOMEM;
         }
-        curr->next.id = channel_id;
-        curr->next.last_message = NULL;
-        curr->next.message_len = 0;
-        curr->next.next = NULL;
+        curr->next->id = channel_id;
+        curr->next->last_message = NULL;
+        curr->next->message_len = 0;
+        curr->next->next = NULL;
         curr = curr->next;
       }
       curr = curr->next;
@@ -144,7 +146,7 @@ struct file_operations Fops = {
 static int __init init(void)
 {
   int rc = -1;
-  rc = register_chrdev( MAJOR_NUM, DEVICE_RANGE_NAME, &Fops );
+  rc = register_chrdev(MAJOR_NUM, DEVICE_RANGE_NAME, &Fops );
   if( rc < 0 ) {
     printk("registration failed");
     return rc;
@@ -153,18 +155,18 @@ static int __init init(void)
   return 0;
 }
 //---------------------------------------------------------------
-static void __exit exit(void)
+static void __exit simple_exit(void)
 {
   // Unregister the device
   // Should always succeed
   int i;
-  Channel* curr, temp;
+  Channel* curr, *temp;
   for(i = 0; i < 256; i++){
     curr = devices[i];
     while(curr){
       temp = curr->next;
       if(curr->last_message){
-        kfree(curr->last_message)
+        kfree(curr->last_message);
       }
       kfree(curr);
       curr = temp;
@@ -174,5 +176,5 @@ static void __exit exit(void)
 }
 
 module_init(init);
-module_exit(exit);
+module_exit(simple_exit);
 //========================= END OF FILE =========================

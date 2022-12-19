@@ -1,11 +1,17 @@
-#define MAJOR 235
+#ifndef MESSAGE_SLOT_H
+#define MESSAGE_SLOT_H
+
+#define MAJOR_NUM 235
 #define BUFF_LEN 128
 
-#define MSG_SLOT_CHANNEL _IOW(MAJOR, 0, unsigned long)
+#define MSG_SLOT_CHANNEL _IOW(MAJOR_NUM, 0, unsigned long)
+#define DEVICE_RANGE_NAME "message_slot_dev"
 
-typedef struct Channel{
+typedef struct ChannelStruct{
     unsigned int id;
     char *last_message;
     int message_len;
-    struct Channel *next;
+    struct ChannelStruct *next;
 }Channel;
+
+#endif
