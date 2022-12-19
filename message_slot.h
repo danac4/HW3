@@ -6,9 +6,6 @@
 typedef struct Channel{
     unsigned int id;
     char *last_message;
+    int message_len;
     struct Channel *next;
 }Channel;
-
-// typedef struct MessageSlotFile{
-//     struct Channel *head;
-// }MessageSlotFile;

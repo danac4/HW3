@@ -13,6 +13,7 @@
 #include <linux/slab.h>
 
 MODULE_LICENSE("GPL");
+
 #include "message_slot.h"
 
 /* devices array:
@@ -21,6 +22,7 @@ MODULE_LICENSE("GPL");
  */
 static Channel* devices[256]; /* message slots file array indexed by minor numbers, each message slot file points to it's channel linked list */
 
+//================== DEVICE FUNCTIONS ===========================
 static int device_open(struct inode* inode, struct file*  file)
 {
   file->private_data = NULL;
@@ -28,28 +30,60 @@ static int device_open(struct inode* inode, struct file*  file)
 }
 
 
+//----------------------------------------------------------------
 static ssize_t device_read(struct file* file, char __user* buffer, size_t length, loff_t* offset)
 {
-  
+  if(!file->private_data){
+    printk("Channel not set in device_read");
+    return -EINVAL;
+  }
+  if(!file->private_data->last_message){
+    printk("No message exists in the requested channel");
+    return -EWOULDBLOCK;
+  }
+  if(file->private_data->message_len > length){
+    printk("provided buffer length is too small");
+    return -ENOSPC;
+  }
+  if(copy_to_user(buffer,file->private_data->last_message,file->private_data->message_len)!= 0){
+    printk("copy_to_user failed in device_read");
+    return -EFAULT;
+  }
+  return file->private_data->message_len;
 }
 
 
+//----------------------------------------------------------------
 static ssize_t device_write(struct file* file, const char __user* buffer, size_t length, loff_t* offset)
 {
   int i;
-  
+  char* message;
   if(!file->private_data){
     printk("Channel not set in device_write");
     return -EINVAL;
   }
-  if(length == 0 || length > BUFF_LEN){
+  if(length <= 0 || length > BUFF_LEN){
     printk("passed message length invalid");x
     return -EMSGSIZE;
   }
-  
-
+  message = kmalloc(sizeof(char)*length,GFP_KERNEL);
+  if(!message){
+    printk("message memory allocation failed in device_write");
+    return -ENOMEM;
+  }
+  if(copy_from_user(message,buffer,length)!=0){
+    printk("copy_from_user failed in device_write");
+    return -EFAULT;
+  }
+  if(file->private_data->last_message){
+    kfree(file->private_data->last_message);
+  }
+  file->private_data->last_message = &message;//?
+  file->private_data->message_len = (int)length;
+  return length;
 }
 
+//----------------------------------------------------------------
 static int device_ioctl(struct file* file, unsigned int ioctl_command_id, unsigned long ioctl_param)
 {
   int minor;
@@ -67,6 +101,7 @@ static int device_ioctl(struct file* file, unsigned int ioctl_command_id, unsign
     }
     devices[minor]->id = channel_id;
     devices[minor]->last_message = NULL;
+    device[minor]->message_len = 0;
     devices[minor]->next = NULL;
     return 0;
   }
@@ -81,6 +116,7 @@ static int device_ioctl(struct file* file, unsigned int ioctl_command_id, unsign
         }
         curr->next.id = channel_id;
         curr->next.last_message = NULL;
+        curr->next.message_len = 0;
         curr->next.next = NULL;
         curr = curr->next;
       }
@@ -91,56 +127,52 @@ static int device_ioctl(struct file* file, unsigned int ioctl_command_id, unsign
   }
 }
 
-/* 
- * Device setup:
- * This structure will hold the functions to be called
- * when a process does something to the device we created
- */
+//==================== DEVICE SETUP =============================
+// This structure will hold the functions to be called
+// when a process does something to the device we created
 struct file_operations Fops = {
   .owner	  = THIS_MODULE, 
   .read           = device_read,
   .write          = device_write,
   .open           = device_open,
   .unlocked_ioctl = device_ioctl,
-  //.release        = device_release,
+  //.release        = device_release,??
 };
 
+//---------------------------------------------------------------
+// Initialize the module - Register the character device
 static int __init init(void)
 {
   int rc = -1;
-  // init dev struct
-  memset( &device_info, 0, sizeof(struct chardev_info) );
-  spin_lock_init( &device_info.lock );
-
-  // Register driver capabilities. Obtain major num
   rc = register_chrdev( MAJOR_NUM, DEVICE_RANGE_NAME, &Fops );
-
-  // Negative values signify an error
   if( rc < 0 ) {
-    printk( KERN_ALERT "%s registraion failed for  %d\n",
-                       DEVICE_FILE_NAME, MAJOR_NUM );
+    printk("registration failed");
     return rc;
   }
-
-  printk( "Registeration is successful. ");
-  printk( "If you want to talk to the device driver,\n" );
-  printk( "you have to create a device file:\n" );
-  printk( "mknod /dev/%s c %d 0\n", DEVICE_FILE_NAME, MAJOR_NUM );
-  printk( "You can echo/cat to/from the device file.\n" );
-  printk( "Dont forget to rm the device file and "
-          "rmmod when you're done\n" );
-
+  printk( "Registeration is successful! Major num: %d\n",MAJOR_NUM);
   return 0;
 }
-
 //---------------------------------------------------------------
 static void __exit exit(void)
 {
   // Unregister the device
   // Should always succeed
+  int i;
+  Channel* curr, temp;
+  for(i = 0; i < 256; i++){
+    curr = devices[i];
+    while(curr){
+      temp = curr->next;
+      if(curr->last_message){
+        kfree(curr->last_message)
+      }
+      kfree(curr);
+      curr = temp;
+    }
+  }
   unregister_chrdev(MAJOR_NUM, DEVICE_RANGE_NAME);
 }
 
-//---------------------------------------------------------------
-module_init(simple_init);
-module_exit(simple_cleanup);
+module_init(init);
+module_exit(exit);
+//========================= END OF FILE =========================
