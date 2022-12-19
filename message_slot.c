@@ -26,6 +26,7 @@ static Channel* devices[256]; /* message slots file array indexed by minor numbe
 //================== DEVICE FUNCTIONS ===========================
 static int device_open(struct inode* inode, struct file*  file)
 {
+  printk("enetring device_open");
   file->private_data = NULL;
   return 0;
 }
@@ -34,7 +35,9 @@ static int device_open(struct inode* inode, struct file*  file)
 //----------------------------------------------------------------
 static ssize_t device_read(struct file* file, char __user* buffer, size_t length, loff_t* offset)
 {
-  Channel *channel = (Channel*)(file->private_data);
+  Channel *channel;
+  printk("enetring device_read");
+  channel = (Channel*)(file->private_data);
   if(!channel){
     printk("Channel not set in device_read");
     return -EINVAL;
@@ -59,27 +62,34 @@ static ssize_t device_read(struct file* file, char __user* buffer, size_t length
 static ssize_t device_write(struct file* file, const char __user* buffer, size_t length, loff_t* offset)
 {
   char* message;
-  Channel *channel = (Channel*)(file->private_data);
+  Channel *channel;
+  channel = (Channel*)(file->private_data);
+  printk("enetring write");
   if(!channel){
     printk("Channel not set in device_write");
     return -EINVAL;
   }
+  printk("after 1 if");
   if(length <= 0 || length > BUFF_LEN){
     printk("passed message length invalid");
     return -EMSGSIZE;
   }
+  printk("after 2 if");
   message = kmalloc(sizeof(char)*length,GFP_KERNEL);
   if(!message){
     printk("message memory allocation failed in device_write");
     return -ENOMEM;
   }
+  printk("after 3 if");
   if(copy_from_user(message,buffer,length)!=0){
     printk("copy_from_user failed in device_write");
     return -EFAULT;
   }
+  printk("after 4 if");
   if(channel->last_message){
     kfree(channel->last_message);
   }
+  printk("after 5 if");
   channel->last_message = message;
   channel->message_len = (int)length;
   return length;
@@ -89,7 +99,9 @@ static ssize_t device_write(struct file* file, const char __user* buffer, size_t
 static long device_ioctl(struct file* file, unsigned int ioctl_command_id, unsigned long ioctl_param)
 {
   int minor;
-  unsigned int channel_id = (unsigned int)ioctl_param;
+  unsigned int channel_id;
+  channel_id = (unsigned int)ioctl_param;
+  printk("enetring device_ioctl");
   minor = (int)iminor(file->f_inode);
   if(ioctl_command_id != MSG_SLOT_CHANNEL || ioctl_param == 0){
     printk("device_icotl failed");
@@ -124,7 +136,7 @@ static long device_ioctl(struct file* file, unsigned int ioctl_command_id, unsig
       }
       curr = curr->next;
     }
-    file->private_data = (void*)curr;
+    file->private_data = curr;
     return 0;
   }
 }
@@ -160,7 +172,8 @@ static void __exit simple_exit(void)
   // Unregister the device
   // Should always succeed
   int i;
-  Channel* curr, *temp;
+  Channel *curr, *temp;
+  printk("enetring simple_exit");
   for(i = 0; i < 256; i++){
     curr = devices[i];
     while(curr){
