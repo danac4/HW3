@@ -11,7 +11,6 @@
 #include <linux/fs.h>       /* for register_chrdev */
 #include <linux/uaccess.h>  /* for get_user and put_user */
 #include <linux/slab.h>
-/*#include <linux/init.h>*/
 
 MODULE_LICENSE("GPL");
 
@@ -96,9 +95,26 @@ static ssize_t device_write(struct file* file, const char __user* buffer, size_t
 }
 
 //----------------------------------------------------------------
+/*
+ * creates new Channel with given channel_id
+ */
+static Channel* create_channel(unsigned int channel_id){
+  Channel* channel = kmalloc(sizeof(Channel),GFP_KERNEL);
+  if(!channel){
+    return NULL;
+  }
+  channel->id = channel_id;
+  channel->last_message = NULL;
+  channel->message_len = 0;
+  channel->next = NULL;
+  return channel;
+}
+
+//----------------------------------------------------------------
 static long device_ioctl(struct file* file, unsigned int ioctl_command_id, unsigned long ioctl_param)
 {
   int minor;
+  Channel* curr;
   unsigned int channel_id;
   channel_id = (unsigned int)ioctl_param;
   printk("enetring device_ioctl");
@@ -108,36 +124,29 @@ static long device_ioctl(struct file* file, unsigned int ioctl_command_id, unsig
     return -EINVAL;
   }
   else if(!devices[minor]){
-    devices[minor] = (Channel*)kmalloc(sizeof(Channel),GFP_KERNEL);
+    devices[minor] = create_channel(channel_id);
     if(!devices[minor]){
       printk("head channel memory allocation failed in device_icotl");
       return -ENOMEM;
     }
-    devices[minor]->id = channel_id;
-    devices[minor]->last_message = NULL;
-    devices[minor]->message_len = 0;
-    devices[minor]->next = NULL;
     file->private_data = (void*)devices[minor];
+    printk("ioctl created head channel successfully");
     return 0;
   }
   else{
-    Channel* curr = devices[minor];
+    curr = devices[minor];
     while(curr->id != channel_id){
       if(!curr->next){
-        curr->next =(Channel*)kmalloc(sizeof(Channel),GFP_KERNEL);
+        curr->next = create_channel(channel_id);
         if(!curr->next){
           printk("channel memory allocation failed in device_icotl");
           return -ENOMEM;
         }
-        curr->next->id = channel_id;
-        curr->next->last_message = NULL;
-        curr->next->message_len = 0;
-        curr->next->next = NULL;
-        curr = curr->next;
       }
       curr = curr->next;
     }
     file->private_data = (void*)curr;
+    printk("ioctl set channel successfully");
     return 0;
   }
 }
