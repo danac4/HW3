@@ -26,15 +26,8 @@ static Channel* devices[256]; /* message slots file array indexed by minor numbe
 //================== DEVICE FUNCTIONS ===========================
 static int device_open(struct inode* inode, struct file*  file)
 {
-  Data* data;
   printk("enetring device_open");
-  data =kmalloc(sizeof(Data),GFP_KERNEL);
-  if(!data){
-    printk("data memory allocation failed in device_open");
-    return -ENOMEM;
-  }
-  data->my_channel = NULL;
-  file->private_data =(void*)data;
+  file->private_data = NULL;
   return 0;
 }
 
@@ -42,26 +35,26 @@ static int device_open(struct inode* inode, struct file*  file)
 //----------------------------------------------------------------
 static ssize_t device_read(struct file* file, char __user* buffer, size_t length, loff_t* offset)
 {
-  Data* data;
+  Channel *channel;
   printk("enetring device_read");
-  data = (Data*)(file->private_data);
-  if(!data->my_channel){
+  channel = (Channel*)(file->private_data);
+  if(!channel){
     printk("Channel not set in device_read");
     return -EINVAL;
   }
-  if(!data->my_channel->last_message){
+  if(!channel->last_message){
     printk("No message exists in the requested channel");
     return -EWOULDBLOCK;
   }
-  if(data->my_channel->message_len > length){
+  if(channel->message_len > length){
     printk("provided buffer length is too small");
     return -ENOSPC;
   }
-  if(copy_to_user(buffer,data->my_channel->last_message,data->my_channel->message_len)!= 0){
+  if(copy_to_user(buffer,channel->last_message,channel->message_len)!= 0){
     printk("copy_to_user failed in device_read");
     return -EFAULT;
   }
-  return data->my_channel->message_len;
+  return channel->message_len;
 }
 
 
@@ -69,20 +62,13 @@ static ssize_t device_read(struct file* file, char __user* buffer, size_t length
 static ssize_t device_write(struct file* file, const char __user* buffer, size_t length, loff_t* offset)
 {
   char* message;
-  Data* data;
-  printk("now we access private data");
-  printk(file->private_data);
-  if(!file->private_data || !buffer){
-    printk("private data not assigned to channel");
-    return -EFAULT;
-  }
-  data = (Data*)(file->private_data);
+  Channel *channel;
+  channel = (Channel*)(file->private_data);
   printk("enetring write");
-  if(!data->my_channel){
+  if(!channel){
     printk("Channel not set in device_write");
     return -EINVAL;
   }
-  channel = data->my_channel
   printk("after 1 if");
   if(length <= 0 || length > BUFF_LEN){
     printk("passed message length invalid");
@@ -100,35 +86,19 @@ static ssize_t device_write(struct file* file, const char __user* buffer, size_t
     return -EFAULT;
   }
   printk("after 4 if");
-  if(data->my_channel->last_message){
-    kfree(data->my_channel->last_message);
+  if(channel->last_message){
+    kfree(channel->last_message);
   }
   printk("after 5 if");
-  data->my_channel->last_message = message;
-  data->my_channel->message_len = (int)length;
+  channel->last_message = message;
+  channel->message_len = (int)length;
   return length;
-}
-
-//----------------------------------------------------------------
-static Channel* create_channel(unsigned int channel_id){
-  Channel* channel = kmalloc(sizeof(channel), GFP_KERNEL);
-  if(!channel){
-    printk("new channel memory allocation failed in create_channel");
-    return -ENOMEM;
-  }
-  channel->id = channel_id;
-  channel->last_message = NULL;
-  channel->message_len = 0;
-  channel->next = NULL;
-  return channel;
 }
 
 //----------------------------------------------------------------
 static long device_ioctl(struct file* file, unsigned int ioctl_command_id, unsigned long ioctl_param)
 {
   int minor;
-  Channel* curr;
-  Data* data;
   unsigned int channel_id;
   channel_id = (unsigned int)ioctl_param;
   printk("enetring device_ioctl");
@@ -137,23 +107,37 @@ static long device_ioctl(struct file* file, unsigned int ioctl_command_id, unsig
     printk("device_icotl failed");
     return -EINVAL;
   }
-  data =(Data*)(file->private_data);
   else if(!devices[minor]){
-    devices[minor] = create_channel(channel_id);
-    printk("icotl created head channel successfully");
-    data->my_channel=devices[minor];
+    devices[minor] = (Channel*)kmalloc(sizeof(Channel),GFP_KERNEL);
+    if(!devices[minor]){
+      printk("head channel memory allocation failed in device_icotl");
+      return -ENOMEM;
+    }
+    devices[minor]->id = channel_id;
+    devices[minor]->last_message = NULL;
+    devices[minor]->message_len = 0;
+    devices[minor]->next = NULL;
+    file->private_data = (void*)devices[minor];
     return 0;
   }
   else{
-    curr = devices[minor];
+    Channel* curr = devices[minor];
     while(curr->id != channel_id){
       if(!curr->next){
-        curr->next =create_channel(channel_id);
+        curr->next =(Channel*)kmalloc(sizeof(Channel),GFP_KERNEL);
+        if(!curr->next){
+          printk("channel memory allocation failed in device_icotl");
+          return -ENOMEM;
+        }
+        curr->next->id = channel_id;
+        curr->next->last_message = NULL;
+        curr->next->message_len = 0;
+        curr->next->next = NULL;
+        curr = curr->next;
       }
       curr = curr->next;
     }
-    data->my_channel = curr;
-    printk("icotl created channel successfully");
+    file->private_data = (void*)curr;
     return 0;
   }
 }
