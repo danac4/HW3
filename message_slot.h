@@ -14,4 +14,8 @@ typedef struct ChannelStruct{
     struct ChannelStruct *next;
 }Channel;
 
+typedef struct DataStruct{
+    Channel *my_channel;
+}Data;
+
 #endif
