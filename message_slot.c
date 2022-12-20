@@ -25,7 +25,7 @@ static Channel* devices[256]; /* message slots file array indexed by minor numbe
 //================== DEVICE FUNCTIONS ===========================
 static int device_open(struct inode* inode, struct file*  file)
 {
-  printk("enetring device_open");
+  printk("invoking device_open");
   file->private_data = NULL;
   return 0;
 }
@@ -42,6 +42,9 @@ static ssize_t device_read(struct file* file, char __user* buffer, size_t length
 {
   Channel *channel;
   printk("Invoking device_read");
+  if(!file->private_data || !buffer){
+    return -EINVAL;
+  }
   channel = (Channel*)(file->private_data);
   if(!channel){
     printk("Channel not set in device_read");
@@ -68,6 +71,9 @@ static ssize_t device_write(struct file* file, const char __user* buffer, size_t
 {
   char* message;
   Channel *channel;
+  if(!file->private_data || !buffer){
+    return -EINVAL;
+  }
   channel = (Channel*)(file->private_data);
   printk("Invoking device_write");
   if(!channel){
@@ -182,7 +188,7 @@ static void __exit simple_exit(void)
   // Should always succeed
   int i;
   Channel *curr, *temp;
-  printk("enetring simple_exit");
+  printk("Invoking simple_exit");
   for(i = 0; i < 256; i++){
     curr = devices[i];
     while(curr){
