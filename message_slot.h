@@ -1,6 +1,8 @@
 #ifndef MESSAGE_SLOT_H
 #define MESSAGE_SLOT_H
 
+#include <linux/ioctl.h>
+
 #define MAJOR_NUM 235//changed to 255 for testing
 #define BUFF_LEN 128
 
