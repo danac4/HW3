@@ -30,12 +30,18 @@ static int device_open(struct inode* inode, struct file*  file)
   return 0;
 }
 
+//---------------------------------------------------------------
+static int device_release(struct inode* inode, struct file*  file)
+{
+  printk("Invoking device_release(%p,%p)\n", inode, file);
+  return 0;
+}
 
 //----------------------------------------------------------------
 static ssize_t device_read(struct file* file, char __user* buffer, size_t length, loff_t* offset)
 {
   Channel *channel;
-  printk("enetring device_read");
+  printk("Invoking device_read");
   channel = (Channel*)(file->private_data);
   if(!channel){
     printk("Channel not set in device_read");
@@ -63,32 +69,27 @@ static ssize_t device_write(struct file* file, const char __user* buffer, size_t
   char* message;
   Channel *channel;
   channel = (Channel*)(file->private_data);
-  printk("enetring write");
+  printk("Invoking device_write");
   if(!channel){
     printk("Channel not set in device_write");
     return -EINVAL;
   }
-  printk("after 1 if");
   if(length <= 0 || length > BUFF_LEN){
     printk("passed message length invalid");
     return -EMSGSIZE;
   }
-  printk("after 2 if");
   message = kmalloc(sizeof(char)*length,GFP_KERNEL);
   if(!message){
     printk("message memory allocation failed in device_write");
     return -ENOMEM;
   }
-  printk("after 3 if");
   if(copy_from_user(message,buffer,length)!=0){
     printk("copy_from_user failed in device_write");
     return -EFAULT;
   }
-  printk("after 4 if");
   if(channel->last_message){
     kfree(channel->last_message);
   }
-  printk("after 5 if");
   channel->last_message = message;
   channel->message_len = (int)length;
   return length;
@@ -117,7 +118,7 @@ static long device_ioctl(struct file* file, unsigned int ioctl_command_id, unsig
   Channel* curr;
   unsigned int channel_id;
   channel_id = (unsigned int)ioctl_param;
-  printk("enetring device_ioctl");
+  printk("Invoking device_ioctl");
   minor = (int)iminor(file->f_inode);
   if(ioctl_command_id != MSG_SLOT_CHANNEL || ioctl_param == 0){
     printk("device_icotl failed");
@@ -130,7 +131,6 @@ static long device_ioctl(struct file* file, unsigned int ioctl_command_id, unsig
       return -ENOMEM;
     }
     file->private_data = (void*)devices[minor];
-    printk("ioctl created head channel successfully");
     return 0;
   }
   else{
@@ -146,7 +146,6 @@ static long device_ioctl(struct file* file, unsigned int ioctl_command_id, unsig
       curr = curr->next;
     }
     file->private_data = (void*)curr;
-    printk("ioctl set channel successfully");
     return 0;
   }
 }
@@ -160,7 +159,7 @@ struct file_operations Fops = {
   .write          = device_write,
   .open           = device_open,
   .unlocked_ioctl = device_ioctl,
-  //.release        = device_release,??
+  .release        = device_release,
 };
 
 //---------------------------------------------------------------
@@ -173,7 +172,7 @@ static int __init init(void)
     printk("registration failed");
     return rc;
   }
-  printk( "Registeration is successful! Major num: %d\n",MAJOR_NUM);
+  printk("Registeration is successful! Major num: %d\n",MAJOR_NUM);
   return 0;
 }
 //---------------------------------------------------------------
